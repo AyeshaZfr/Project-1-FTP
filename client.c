@@ -10,10 +10,10 @@
 #define buffer_size 100
 
 #include "helper.definations.h"
-#include "helper.readFile.c"
+#include "helper.userAuth.c"
 #define DEFINE
 
-void user_login();
+void client_user_login(int server_sd);
 
 int main()
 {
@@ -56,7 +56,10 @@ int main()
 		exit(-1);
 	}
 	printf("%s \n", SERVER_OPEN);
-    user_login();
+
+    char buffer[buffer_size];
+    
+    client_user_login(server_sd);
 
     
     // int bytes = send(server_sd, buffer, sizeof(buffer), 0);
@@ -70,56 +73,64 @@ int main()
 	}
 }
 
-void user_login(){
+void client_user_login(int server_sd){
     read_file();
 
-    char buffer[buffer_size];
+    char pass_buffer[buffer_size];
     char* token1;
     char* token2;
     int found_user  = -1;
     int isloggedin = -1;
     int index = 0;
     
-    while(isloggedin == -1)
+    while(strcmp( pass_buffer, LOGIN_SUCCESS ) != 0)
     {
-        bzero(buffer, sizeof(buffer));
-        fgets(buffer, buffer_size, stdin);
-        token1 = strtok(buffer, " ");
+        bzero(pass_buffer, sizeof(pass_buffer));
+        fgets(pass_buffer, buffer_size, stdin);
+        token1 = strtok(pass_buffer, " ");
         token2 = strtok(0, "\n");
+        
+
+        // if correct command
         if(strcmp( token1, "USER") == 0){
-            for (int i = 0; i<num_users; i++){
-                if(strcmp( token2,users[i].username ) == 0){
-                    found_user = 0;
-                    index = i;
-                    break;
-                }
-            }
+            int bytes = send(server_sd, token2, sizeof(token2), 0);
+            bzero(pass_buffer, sizeof(pass_buffer));
+            int bytes1 = recv(server_sd, pass_buffer, sizeof(pass_buffer), 0);
+            printf("%s \n", pass_buffer);
+            
         }
+        // incorrect command means err thrown
         else{
-            printf("%s \n", LOGIN_FAILED);
-            continue;
+                printf("%s\n", LOGIN_FAILED);
+                continue;
         }
-        if(found_user == 0){
-            printf("%s \n", LOGIN_NEED_PASS);
-            bzero(buffer, sizeof(buffer));
-            fgets(buffer, buffer_size, stdin);
-            token1 = strtok(buffer, " ");
+        
+        if(strcmp( pass_buffer, LOGIN_NEED_PASS) == 0){
+            bzero(pass_buffer, sizeof(pass_buffer));
+            fgets(pass_buffer, buffer_size, stdin);
+            token1 = strtok(pass_buffer, " ");
             token2 = strtok(0, "\n");
 
-            if(strcmp( token1, "PASS") == 0 && strcmp(token2, users[index].password) == 0){
-                printf("%s \n", LOGIN_SUCCESS);
-                isloggedin = 0;
-                break;
-            }
+            if(strcmp( token1, "PASS") == 0){
+                // sends password
+                int bytes = send(server_sd, token2, sizeof(token2), 0);
 
+                bzero(pass_buffer, sizeof(pass_buffer));
+
+                // receives response
+                int bytes1 = recv(server_sd, pass_buffer, sizeof(pass_buffer), 0);
+                printf("%s \n", pass_buffer);
+                bzero(pass_buffer, sizeof(pass_buffer));
+            }
             else{
-                printf("%s \n", LOGIN_FAILED);
+                printf("%s\n", LOGIN_FAILED);
             }
         }
         else{
-            printf("%s \n", LOGIN_FAILED);  
+           continue;
         }
     }
+    printf("exitted\n");
 
 
 }
