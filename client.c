@@ -13,6 +13,8 @@
 #include "helper.readFile.c"
 #define DEFINE
 
+void user_login();
+
 int main()
 {
     printf("Hello !! Please Authenticate to run server commands\n");
@@ -54,7 +56,21 @@ int main()
 		exit(-1);
 	}
 	printf("%s \n", SERVER_OPEN);
+    user_login();
 
+    
+    // int bytes = send(server_sd, buffer, sizeof(buffer), 0);
+
+	while (1)
+	{
+		// accept
+		
+
+
+	}
+}
+
+void user_login(){
     read_file();
 
     char buffer[buffer_size];
@@ -105,13 +121,5 @@ int main()
         }
     }
 
-    int bytes = send(server_sd, buffer, sizeof(buffer), 0);
 
-	while (1)
-	{
-		// accept
-		
-
-
-	}
 }
