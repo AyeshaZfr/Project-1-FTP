@@ -9,6 +9,10 @@
 #define PORT 6000
 #define buffer_size 100
 
+#include "helper.definations.h"
+#include "helper.readFile.c"
+#define DEFINE
+
 int main()
 {
     printf("Hello !! Please Authenticate to run server commands\n");
@@ -23,7 +27,6 @@ int main()
     printf("'CWD' + space + directory |to change the current server directory.\n");
     printf("'PWD' to display the current server directory.\n");
     printf("Add '!' before the last three commands to apply them locally.\n");
-    printf("220 Service ready for new user.\n");
 	// create socket
 	//  AF_INET for designating IP address (domain)
 	//  SOCK_STREAM for TCP connection (type)
@@ -50,25 +53,65 @@ int main()
 		perror("connect");
 		exit(-1);
 	}
-	printf("Connected to server.\n");
+	printf("%s \n", SERVER_OPEN);
+
+    read_file();
+
+    char buffer[buffer_size];
+    char* token1;
+    char* token2;
+    int found_user  = -1;
+    int isloggedin = -1;
+    int index = 0;
+    
+    while(isloggedin == -1)
+    {
+        bzero(buffer, sizeof(buffer));
+        fgets(buffer, buffer_size, stdin);
+        token1 = strtok(buffer, " ");
+        token2 = strtok(0, "\n");
+        if(strcmp( token1, "USER") == 0){
+            for (int i = 0; i<num_users; i++){
+                if(strcmp( token2,users[i].username ) == 0){
+                    found_user = 0;
+                    index = i;
+                    break;
+                }
+            }
+        }
+        else{
+            printf("%s \n", LOGIN_FAILED);
+            continue;
+        }
+        if(found_user == 0){
+            printf("%s \n", LOGIN_NEED_PASS);
+            bzero(buffer, sizeof(buffer));
+            fgets(buffer, buffer_size, stdin);
+            token1 = strtok(buffer, " ");
+            token2 = strtok(0, "\n");
+
+            if(strcmp( token1, "PASS") == 0 && strcmp(token2, users[index].password) == 0){
+                printf("%s \n", LOGIN_SUCCESS);
+                isloggedin = 0;
+                break;
+            }
+
+            else{
+                printf("%s \n", LOGIN_FAILED);
+            }
+        }
+        else{
+            printf("%s \n", LOGIN_FAILED);  
+        }
+    }
+
+    int bytes = send(server_sd, buffer, sizeof(buffer), 0);
 
 	while (1)
 	{
 		// accept
-		char buffer[buffer_size];
-		bzero(buffer, sizeof(buffer));
-		printf("Enter a message: %s", buffer);
+		
 
-		fgets(buffer, buffer_size, stdin);
 
-		int bytes = send(server_sd, buffer, sizeof(buffer), 0);
-
-		int bytes_2 = recv(server_sd, buffer, sizeof(buffer), 0);
-
-		if (strncmp(buffer, "BYE!\n", 5) == 0)
-		{
-			break;
-		};
-		printf("Server Response: %s", buffer);
 	}
 }
