@@ -18,7 +18,7 @@
 #define LOGIN_NEED_PASS "331 Username OK, need password."
 #define LOGIN_SUCCESS "230 User logged in, proceed."
 
-#define VALID_DIRECTORY "200 directory changed to %s."
+#define VALID_DIRECTORY "200 directory changed to "
 #define INVALID_DIRECTORY "550 No such file or directory."
 
 #define INVALID_SEQUENCE "503 Bad sequence of commands."
