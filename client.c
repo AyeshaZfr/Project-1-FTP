@@ -17,6 +17,9 @@
 #include "helper.userAuth.c"
 #define DEFINE
 
+// A global variable for the number of file transfers so far
+unsigned int transfer_count = 0;
+
 void client_user_login(int server_sd);
 int list_client_files(char *current_directory);
 int change_client_directory(char *current_directory, char *new_directory);
@@ -68,11 +71,9 @@ int main()
     }
     printf("%s \n", SERVER_OPEN);
 
-    // int auth = client_user_login(server_sd);
-    // while (auth != 0)
-    // {
+    
     client_user_login(server_sd);
-    // }
+   
 
     // get cwd
     char current_directory[1000];
@@ -121,6 +122,9 @@ int main()
         }
         else if (strcmp(command, "QUIT") == 0)
         {
+            send_to_server(command, params, server_sd, buffer);
+            close(server_sd);
+
             break;
         }
         else if (strcmp(command, "CWD") == 0)
@@ -146,6 +150,77 @@ int main()
                 printf("%s\n", INVALID_SEQUENCE);
                 continue;
             }
+        }
+        else if ((strcmp(command, "STOR") == 0) || (strcmp(command, "LIST") == 0) || (strcmp(command, "RETR") == 0))
+        {
+            char temp_request[directory_size];
+            char temp_response[directory_size];
+            bzero(temp_request, directory_size);
+            bzero(temp_response, directory_size);
+
+            unsigned int h_1, h_2, h_3, h_4, p_1, p_2;
+            int personal_port = ntohs(server_addr.sin_port) + (++transfer_count);
+            char *personal_ip = inet_ntoa(server_addr.sin_addr);
+            sscanf(personal_ip, "%u.%u.%u.%u", &h_1, &h_2, &h_3, &h_4);
+            p_1 = personal_port / 256;
+            p_2 = personal_port % 256;
+
+            snprintf(temp_request, directory_size, PORT_REQUEST_FORMAT, h_1, h_2, h_3, h_4, p_1, p_2);
+
+            // send port to server
+            int bytes_sent = send(server_sd, temp_request, sizeof(temp_request), 0);
+
+    
+            int client_receiver_sd = socket(AF_INET, SOCK_STREAM, 0);
+            if (client_receiver_sd < 0)
+            {
+                perror("Client Receiver Socket creation:");
+                exit(-1);
+            }
+            struct sockaddr_in client_receiver_addr;                        // structure to save IP address and port
+            memset(&client_receiver_addr, 0, sizeof(client_receiver_addr)); // Initialize/fill the server_address to 0
+            client_receiver_addr.sin_family = AF_INET;                      // address family
+            client_receiver_addr.sin_port = htons(personal_port);           // port
+            client_receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");  // htonl(INADDR_LOOPBACK); //inet_addr("127.0.0.1");
+            socklen_t client_receiver_addr_size = sizeof(client_receiver_addr);
+            if (setsockopt(client_receiver_sd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
+            {
+                perror("setsockopt(SO_REUSEADDR) failed");
+            }
+
+            // bind
+            if (bind(client_receiver_sd, (struct sockaddr *)&client_receiver_addr, sizeof(client_receiver_addr)) < 0)
+            {
+                perror("Client Receiver Socket: bind failed");
+                exit(-1);
+            }
+            // listen
+            if (listen(client_receiver_sd, 5) < 0)
+            {
+                perror("Client Receiver Socket: listen failed");
+                close(client_receiver_sd);
+                exit(-1);
+            }
+
+            // recv the port command successsful
+            bzero(temp_response, sizeof(temp_response));
+            int recv_succ = recv(server_sd, temp_response, sizeof(temp_response), 0);
+            printf("%s\n", temp_response);
+
+            int server_data_sd = accept(client_receiver_sd, 0, 0);
+
+            // new sock recieves smt before sonnect
+            char recvv[buffer_size];
+            bzero(recvv, buffer_size);
+            send(server_data_sd, FILE_STATUS_OK, sizeof(FILE_STATUS_OK), 0);
+            printf("%s\n", FILE_STATUS_OK);
+            
+            if (server_data_sd < 1)
+            {
+                perror("Client Data Accept Error.");
+                exit(-1);
+            }
+
         }
         else
         {

@@ -9,7 +9,7 @@
 // https://iq.opengenus.org/ls-command-in-c/
 // Used for handling directory files
 #include <dirent.h>
-#include <errno.h>
+// #include <errno.h>
 
 #define PORT 6000
 #define directory_size 500
@@ -20,7 +20,7 @@
 #define DEFINE
 
 void server_user_login(int server_sd);
-void serve_client(int client_fd, int user_index);
+void serve_client(int client_fd, int user_index, struct sockaddr_in *client_address_ptr);
 int main()
 {
     // create  and bind socket
@@ -75,8 +75,6 @@ int main()
 
     fd_set readfds;
 
-    // server_user_login(server_sd);
-
     while (1)
     {
         // clear the set socket
@@ -106,7 +104,7 @@ int main()
         }
 
         activity = select(max_fd + 1, &readfds, NULL, NULL, NULL);
-        if (activity < 0 && (errno != EINTR))
+        if (activity < 0)
         {
             perror("select");
         }
@@ -127,9 +125,7 @@ int main()
                 // if position is empty
                 if (client_socket[i] == 0)
                 {
-
                     client_socket[i] = new_socket;
-                    // server_user_login(sd);
                     break;
                 }
             }
@@ -142,6 +138,8 @@ int main()
             if (FD_ISSET(sd, &readfds))
             {
                 int user_index = get_user_index(sd);
+                // for data connection
+                struct sockaddr_in *client_address_ptr;
 
                 if (users[user_index].authenticated == 0)
                 {
@@ -149,7 +147,8 @@ int main()
                 }
                 else
                 {
-                    serve_client(sd, user_index);
+                    struct sockaddr_in client_address_ptr;
+                    serve_client(sd, user_index, &client_address_ptr);
                 }
             }
         }
@@ -158,8 +157,6 @@ int main()
 
 void server_user_login(int client_sd)
 {
-    printf("Hello I come into server loop\n");
-
     char *token2;
     int isloggedin = -1;
     int user_found = -1;
@@ -203,9 +200,9 @@ void server_user_login(int client_sd)
 
                 send(client_sd, LOGIN_SUCCESS, sizeof(LOGIN_SUCCESS), 0);
                 char current_directory[buffer_size];
+                bzero(current_directory, sizeof(current_directory));
                 getcwd(current_directory, sizeof(current_directory));
-                // update_authentication(users[i].username, 0);
-                update_directory(users[i].sd, current_directory);
+                strcpy(users[i].directory, current_directory);
                 users[i].sd = client_sd;
                 int authenticated = 1;
                 users[i].authenticated = authenticated;
@@ -220,7 +217,7 @@ void server_user_login(int client_sd)
         }
     }
 }
-void serve_client(int client_sd, int user_index)
+void serve_client(int client_sd, int user_index, struct sockaddr_in *client_address_ptr)
 {
 
     char buffer[directory_size];
@@ -229,6 +226,7 @@ void serve_client(int client_sd, int user_index)
     char *params;
 
     recv(client_sd, buffer, sizeof(buffer), 0);
+
     if (strstr(buffer, " ") == NULL)
     {
         command = strtok(buffer, "\n");
@@ -240,11 +238,33 @@ void serve_client(int client_sd, int user_index)
         params = strtok(0, "\n");
     }
 
+    printf("Command %s\n", command);
+
     // get users CWD
     char current_directory[buffer_size];
     strcpy(current_directory, users[user_index].directory);
 
-    if (strcmp(command, "CWD") == 0)
+    if (strcmp(command, "QUIT") == 0)
+    {
+
+        printf("Closing Client Connection.\n");
+        for (int i = user_index; i < num_users - 1; i++)
+        {
+            users[i] = users[i + 1];
+        }
+
+        struct user users_del[num_users - 1];
+
+        for (int i = 0; i < num_users - 1; i++)
+        {
+            users_del[i] = users[i];
+        }
+
+        send(client_sd, SERVER_CLOSE, sizeof(SERVER_CLOSE), 0);
+        num_users--;
+    }
+
+    else if (strcmp(command, "CWD") == 0)
     {
         char new_path[2000];
         if (params[0] == '/')
@@ -264,7 +284,7 @@ void serve_client(int client_sd, int user_index)
             char directory_buffer[directory_size];
             bzero(directory_buffer, directory_size);
             strcat(strcat(directory_buffer, VALID_DIRECTORY), new_path);
-            strcpy(users[user_index].directory,new_path);
+            strcpy(users[user_index].directory, new_path);
             send(client_sd, directory_buffer, sizeof(directory_buffer), 0);
             closedir(dir);
         }
@@ -280,7 +300,6 @@ void serve_client(int client_sd, int user_index)
         DIR *directory_path;
         struct dirent *file_pointer;
         directory_path = opendir(current_directory);
-
         if (directory_path != NULL)
         {
             char buffer[directory_size];
@@ -293,10 +312,61 @@ void serve_client(int client_sd, int user_index)
             send(client_sd, INVALID_DIRECTORY, sizeof(INVALID_DIRECTORY), 0);
         }
     }
+    else if ((strcmp(command, "PORT") == 0))
+    {
+
+        int client_receiver_sd = socket(AF_INET, SOCK_STREAM, 0);
+
+        unsigned int h_1, h_2, h_3, h_4, p_1, p_2;
+
+        char full_command[buffer_size];
+        bzero(full_command, directory_size);
+        strcat(strcat(full_command, command), " ");
+        strcat(full_command, params);
+        sscanf(full_command, PORT_REQUEST_FORMAT, &h_1, &h_2, &h_3, &h_4, &p_1, &p_2);
+        printf("h_1=%u | h_2=%u | h_3=%u | h_4=%u | p_1=%u | p_2=%u\n", h_1, h_2, h_3, h_4, p_1, p_2);
+        unsigned int client_ip_address = (h_1 << 24) + (h_2 << 16) + (h_3 << 8) + h_4;
+        unsigned short client_port = (p_1 * 256) + p_2;
+
+        if (client_receiver_sd < 0)
+        {
+            perror("Client Receiver Socket creation:");
+            exit(-1);
+        }
+
+        // open data address for ftp
+        struct sockaddr_in client_receiver_addr;                        // structure to save IP address and port
+        memset(&client_receiver_addr, 0, sizeof(client_receiver_addr)); // Initialize/fill the server_address to 0
+        client_receiver_addr.sin_family = AF_INET;                      // address family
+        client_receiver_addr.sin_port = htons(client_port);             // port
+        client_receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");  // htonl(INADDR_LOOPBACK); //inet_addr("127.0.0.1");
+
+        setsockopt(client_receiver_sd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)); //&(int){1},sizeof(int)
+        if (setsockopt(client_receiver_sd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
+        {
+            perror("setsockopt(SO_REUSEADDR) failed");
+        }
+
+        // b.server connects to that port using port 20; client accepts connection
+        printf("Client Port Accepting Hello: %d\n", client_receiver_addr.sin_port);
+
+        if (connect(client_receiver_sd, (struct sockaddr *)&client_receiver_addr, sizeof(client_receiver_addr)) < 0)
+        {
+            perror("Connection Failed: Server Data.");
+            exit(-1);
+        }
+
+        // send port created
+        int send_bytes = send(client_sd, PORT_SUCCESS, sizeof(PORT_SUCCESS), 0);
+        printf("SENT BYTES old port: %d\n", send_bytes);
+
+        // send smt
+        bzero(buffer, sizeof(buffer));
+        int snew_sd_rec_bytes_ = recv(client_receiver_sd, buffer, sizeof(buffer), 0);
+    }
     else
     {
-        char buffer[directory_size];
-        bzero(buffer, buffer_size);
-        int recv_bytes = recv(client_sd, buffer, sizeof(buffer), 0);
+
+        send(client_sd, INVALID_COMMAND, sizeof(INVALID_COMMAND), 0);
     }
 }
