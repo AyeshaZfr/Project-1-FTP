@@ -59,22 +59,15 @@ int read_file()
 int get_user_index(int sd)
 {
     for (int i = 0; i < num_users; i++)
-    {
+    {     
         if (users[i].sd == sd)
-        {
+        {   
             return i;
         }
     }
     return -1;
 }
-// int update_authentication(char *username, char *new_value)
-// {
-//     int index = get_user_index(username);
 
-//     strcpy(users[index].authenticated, &new_value);
-
-//     return 0;
-// }
 
 int update_directory(int sd, char *new_value)
 {
