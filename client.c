@@ -15,10 +15,10 @@
 
 #include "helper.definations.h"
 #include "helper.userAuth.c"
+
 #define DEFINE
 
 // A global variable for the number of file transfers so far
-unsigned int transfer_count = 0;
 
 void client_user_login(int server_sd);
 int list_client_files(char *current_directory);
@@ -71,21 +71,21 @@ int main()
     }
     printf("%s \n", SERVER_OPEN);
 
-    
     client_user_login(server_sd);
-   
-
-    // get cwd
-    char current_directory[1000];
-    getcwd(current_directory, sizeof(current_directory));
 
     char buffer[buffer_size];
     char *command;
     char *params;
 
+    // get cwd
+    char current_directory[1000];
+    bzero(current_directory, sizeof(current_directory));
+    getcwd(current_directory, sizeof(current_directory));
+
     while (1)
     {
         bzero(buffer, sizeof(buffer));
+
         printf("ftp> ");
         fgets(buffer, buffer_size, stdin);
 
@@ -153,13 +153,20 @@ int main()
         }
         else if ((strcmp(command, "STOR") == 0) || (strcmp(command, "LIST") == 0) || (strcmp(command, "RETR") == 0))
         {
+
+            send(server_sd, "PORT", 4, 0);
+
+            int count;
+            recv(server_sd, &count, sizeof(count), 0);
+            printf("count %d\n", count);
+
             char temp_request[directory_size];
             char temp_response[directory_size];
             bzero(temp_request, directory_size);
             bzero(temp_response, directory_size);
 
             unsigned int h_1, h_2, h_3, h_4, p_1, p_2;
-            int personal_port = ntohs(server_addr.sin_port) + (++transfer_count);
+            int personal_port = ntohs(server_addr.sin_port) + (count);
             char *personal_ip = inet_ntoa(server_addr.sin_addr);
             sscanf(personal_ip, "%u.%u.%u.%u", &h_1, &h_2, &h_3, &h_4);
             p_1 = personal_port / 256;
@@ -170,7 +177,6 @@ int main()
             // send port to server
             int bytes_sent = send(server_sd, temp_request, sizeof(temp_request), 0);
 
-    
             int client_receiver_sd = socket(AF_INET, SOCK_STREAM, 0);
             if (client_receiver_sd < 0)
             {
@@ -209,18 +215,134 @@ int main()
 
             int server_data_sd = accept(client_receiver_sd, 0, 0);
 
-            // new sock recieves smt before sonnect
+            // new sock send LIST STOR RETR command
+            send(server_data_sd, command, sizeof(command), 0);
+
+            // recieve file status ok
             char recvv[buffer_size];
             bzero(recvv, buffer_size);
-            send(server_data_sd, FILE_STATUS_OK, sizeof(FILE_STATUS_OK), 0);
-            printf("%s\n", FILE_STATUS_OK);
-            
+            recv(server_data_sd, recvv, sizeof(recvv), 0);
+            printf("%s\n", recvv);
+
             if (server_data_sd < 1)
             {
                 perror("Client Data Accept Error.");
                 exit(-1);
             }
 
+            if (strcmp(command, "LIST") == 0)
+            {
+                char FILE_BUFFER[FILE_CHUNK_SIZE];
+                bzero(FILE_BUFFER, sizeof(FILE_BUFFER));
+                int recieved_bytes = recv(server_data_sd, FILE_BUFFER, sizeof(FILE_BUFFER), 0);
+                if (recieved_bytes == 0)
+                {
+                    printf("LIST OUTPUT RECIEVING FAILED.\n");
+                }
+                printf("%.*s", (int)strlen(FILE_BUFFER), FILE_BUFFER);
+            }
+            // for retr command
+            else if (strcmp(command, "RETR") == 0)
+            {
+                char send_file_name[buffer_size];
+                strcpy(send_file_name, params);
+                send(server_data_sd, send_file_name, sizeof(send_file_name), 0);
+                // new sock send LIST STOR RETR command
+                if (strcmp(params, "") != 0)
+                {
+
+                    // create tmp file
+                    char tmp_file[buffer_size];
+                    bzero(tmp_file, sizeof(tmp_file));
+                    strcpy(tmp_file, "tmp_");
+                    strcat(tmp_file, params);
+
+                    FILE *fp = fopen(tmp_file, "w");
+
+                    if (fp == NULL)
+                    {
+                        perror("Failed to write file");
+                        continue;
+                    }
+
+                    // Does the file exist?
+                    if (strcmp(buffer, INVALID_SEQUENCE) == 0)
+                    {
+                        printf("%s\n", INVALID_SEQUENCE);
+                        continue;
+                    }
+
+                    int valread = recv(server_data_sd, buffer, FILE_CHUNK_SIZE, 0);
+
+                    if (valread > FILE_CHUNK_SIZE)
+                    {
+                        while (valread == FILE_CHUNK_SIZE)
+                        { // Big files may require multiple reads
+                            fwrite(buffer, 1, valread, fp);
+                            bzero(buffer, sizeof(buffer));
+                            valread = recv(server_data_sd, buffer, FILE_CHUNK_SIZE, 0);
+                        }
+                    }
+                    else
+                    {
+                        fwrite(buffer, 1, valread, fp);
+                        bzero(buffer, sizeof(buffer));
+                    }
+
+                    fclose(fp);
+                    close(server_data_sd);
+                }
+                else
+                {
+                    printf("%s\n", INVALID_COMMAND);
+                }
+                close(server_data_sd);
+            }
+            else if (strcmp(command, "STOR") == 0)
+            {
+                char send_file_name[buffer_size];
+                strcpy(send_file_name, params);
+                send(server_data_sd, send_file_name, sizeof(send_file_name), 0);
+
+                int pid = fork();
+                if (pid == 0)
+                {
+
+                    FILE *fp = fopen(params, "r");
+                    if (!fp)
+                    {
+                        perror("File does not exist.");
+                        close(server_data_sd);
+                    }
+
+                    bzero(buffer, sizeof(buffer));
+                    int valread = fread(buffer, sizeof(char), FILE_CHUNK_SIZE, fp);
+
+                    if (valread < FILE_CHUNK_SIZE)
+                    {
+                        send(server_data_sd, buffer, valread, 0);
+                    }
+                    else
+                    {
+                        while (valread == FILE_CHUNK_SIZE)
+                        {
+                            if (valread > 0)
+                            {
+                                valread = fread(buffer, sizeof(char), FILE_CHUNK_SIZE, fp);
+                                send(server_data_sd, buffer, valread, 0);
+                            }
+                            else
+                            {
+                                printf("%s\n", INVALID_SEQUENCE);
+                            }
+                        }
+                    }
+                    fclose(fp);
+                    close(server_data_sd);
+                }
+                close(server_data_sd);
+            }
+            close(server_data_sd);
         }
         else
         {
@@ -240,21 +362,33 @@ void client_user_login(int server_sd)
 
     while (isloggedin == 1)
     {
+        printf("Begin\n");
         bzero(pass_buffer, sizeof(pass_buffer));
         printf("ftp> ");
         fgets(pass_buffer, buffer_size, stdin);
+
+        if (pass_buffer[5] == '\n')
+        {
+            continue;
+        }
+
         token1 = strtok(pass_buffer, " ");
+        printf("token 1 '%s'\n", token1);
         token2 = strtok(0, "\n");
+        printf("token 2 '%s'\n", token2);
 
         // if correct command
         if (strcmp(token1, "USER") == 0)
         {
+            printf("I come here\n");
+
             send(server_sd, token2, sizeof(token2), 0);
             bzero(pass_buffer, sizeof(pass_buffer));
             int bytes1 = recv(server_sd, pass_buffer, sizeof(pass_buffer), 0);
             printf("%s \n", pass_buffer);
         }
         // incorrect command means err thrown
+
         else
         {
             printf("%s\n", LOGIN_FAILED);
@@ -269,8 +403,14 @@ void client_user_login(int server_sd)
             token1 = strtok(pass_buffer, " ");
             token2 = strtok(0, "\n");
 
+            if (pass_buffer[5] == '\n')
+            {
+                continue;
+            }
+
             if (strcmp(token1, "PASS") == 0)
             {
+                int user_index;
                 // sends password
                 send(server_sd, token2, sizeof(token2), 0);
 
@@ -288,6 +428,7 @@ void client_user_login(int server_sd)
             else
             {
                 printf("%s\n", LOGIN_FAILED);
+                // continue;
             }
         }
     }

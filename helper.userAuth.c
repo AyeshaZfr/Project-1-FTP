@@ -4,7 +4,7 @@
 #define buffer_size 500
 struct user
 {
-    int sd;
+    int server_sd;
     int authenticated;
     char username[buffer_size];
     char password[buffer_size];
@@ -43,7 +43,7 @@ int read_file()
                 strcpy(users[num_users].directory, directory);
 
                 int sd = 0;
-                users[num_users].sd = sd;
+                users[num_users].server_sd = sd;
 
                 int authenticated = 0;
                 users[num_users].authenticated = authenticated;
@@ -53,21 +53,20 @@ int read_file()
             }
         }
     }
-
+    fclose(fptr);
     return 0;
 }
 int get_user_index(int sd)
 {
     for (int i = 0; i < num_users; i++)
-    {     
-        if (users[i].sd == sd)
-        {   
+    {
+        if (users[i].server_sd == sd)
+        {
             return i;
         }
     }
     return -1;
 }
-
 
 int update_directory(int sd, char *new_value)
 {

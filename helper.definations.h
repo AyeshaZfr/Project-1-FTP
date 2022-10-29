@@ -30,7 +30,7 @@
 
 #define PORT_REQUEST_FORMAT "PORT %u,%u,%u,%u,%u,%u"
 
-
+#define FILE_CHUNK_SIZE 1500
 #define PWD "257 %s."
 
 
