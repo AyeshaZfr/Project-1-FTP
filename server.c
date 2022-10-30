@@ -27,8 +27,8 @@ void serve_client(int client_fd, int user_index, struct sockaddr_in *client_addr
 
 int main()
 {
-    // create  and bind socket
     read_file();
+    // create  and bind socket
 
     int sd, max_fd, activity, new_socket;
     int client_socket[MAX_CLIENTS];
@@ -73,8 +73,6 @@ int main()
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
         client_socket[i] = 0;
-
-        // sd2stat[i] = new_stat(NULL, 0, default_path);
     }
 
     fd_set readfds;
@@ -144,8 +142,8 @@ int main()
 
                 int user_index = get_user_index(sd);
 
-                // for data connection
-                struct sockaddr_in *client_address_ptr;
+                // // for data connection
+                // struct sockaddr_in *client_address_ptr;
 
                 if (users[user_index].authenticated == 0)
                 {
@@ -163,6 +161,8 @@ int main()
 
 void server_user_login(int client_sd)
 {
+    printf("I come heres \n");
+
     char *token2;
     int isloggedin = -1;
     int user_found = -1;
@@ -177,52 +177,35 @@ void server_user_login(int client_sd)
 
             if (sizeof(pass_buffer) == 0)
             {
-                printf("I came herrr in 1 if \n");
                 send(client_sd, LOGIN_FAILED, sizeof(LOGIN_FAILED), 0);
-                break;
+                continue;
             }
 
             if (strcmp(pass_buffer, users[i].username) == 0)
             {
-                printf("I came herrr in 2 if\n");
                 send(client_sd, LOGIN_NEED_PASS, sizeof(LOGIN_NEED_PASS), 0);
-            }
-            else
-            {
-                printf("I came herrr\n");
-                send(client_sd, LOGIN_FAILED, sizeof(LOGIN_FAILED), 0);
-                // if (i == num_users - 1)
-                // {
-                //     send(client_sd, LOGIN_FAILED, sizeof(LOGIN_FAILED), 0);
-                //     break;
-                // }
-                // else
-                // {
-                //     send(client_sd, LOGIN_FAILED, sizeof(LOGIN_FAILED), 0);
-                //     continue;
-                // }
-            }
-            char pass_buffer[buffer_size];
-            recv(client_sd, pass_buffer, sizeof(pass_buffer), 0);
+                char pass_buffer[buffer_size];
+                recv(client_sd, pass_buffer, sizeof(pass_buffer), 0);
 
-            if (strcmp(pass_buffer, users[i].password) == 0)
-            {
+                if (strcmp(pass_buffer, users[i].password) == 0)
+                {
 
-                send(client_sd, LOGIN_SUCCESS, sizeof(LOGIN_SUCCESS), 0);
-                char current_directory[buffer_size];
-                bzero(current_directory, sizeof(current_directory));
-                getcwd(current_directory, sizeof(current_directory));
-                strcpy(users[i].directory, current_directory);
-                users[i].server_sd = client_sd;
-                int authenticated = 1;
-                users[i].authenticated = authenticated;
-                isloggedin = 0;
-                break;
-            }
-            else
-            {
-                send(client_sd, LOGIN_FAILED, sizeof(LOGIN_FAILED), 0);
-                break;
+                    send(client_sd, LOGIN_SUCCESS, sizeof(LOGIN_SUCCESS), 0);
+                    char current_directory[buffer_size];
+                    bzero(current_directory, sizeof(current_directory));
+                    getcwd(current_directory, sizeof(current_directory));
+                    strcpy(users[i].directory, current_directory);
+                    users[i].server_sd = client_sd;
+                    int authenticated = 1;
+                    users[i].authenticated = authenticated;
+                    isloggedin = 0;
+                    break;
+                }
+                else
+                {
+                    send(client_sd, LOGIN_FAILED, sizeof(LOGIN_FAILED), 0);
+                    break;
+                }
             }
         }
     }
@@ -322,7 +305,9 @@ void serve_client(int client_sd, int user_index, struct sockaddr_in *client_addr
 
         char full_command[buffer_size];
         bzero(full_command, directory_size);
+        printf("Before recv tmp command\n");
         recv(client_sd, full_command, sizeof(full_command), 0);
+        printf("After recv tmp command\n");
         // strcat(strcat(full_command, command), " ");
         // strcat(full_command, params);
         sscanf(full_command, PORT_REQUEST_FORMAT, &h_1, &h_2, &h_3, &h_4, &p_1, &p_2);
@@ -370,7 +355,6 @@ void serve_client(int client_sd, int user_index, struct sockaddr_in *client_addr
         // send file status ok
         send(client_receiver_sd, FILE_STATUS_OK, sizeof(buffer), 0);
 
-        int success;
         if (strcmp(buffer, "LIST") == 0)
         {
             // open directory
@@ -379,85 +363,95 @@ void serve_client(int client_sd, int user_index, struct sockaddr_in *client_addr
             directory_path = opendir(current_directory);
             printf("This is directory %s\n", current_directory);
 
-            int pid = fork();
-            if (fork() == 0)
+            // int pid = fork();
+            // if (fork() == 0)o
+            // {
+            // Will execute the ls command and store its output in a pipe
+            bzero(buffer, sizeof(buffer));
+            strcpy(buffer, "cd ");
+            strcat(buffer, current_directory);
+            strcat(buffer, " && ls");
+            printf("buffer %s\n", buffer);
+            FILE *ls_file = popen(buffer, "r");
+            if (ls_file == NULL)
             {
-                // Will execute the ls command and store its output in a pipe
-                bzero(buffer, sizeof(buffer));
-                strcpy(buffer, "cd ");
-                strcat(buffer, current_directory);
-                strcat(buffer, " && ls");
-                printf("buffer %s\n", buffer);
-                FILE *ls_file = popen(buffer, "r");
-                if (ls_file == NULL)
-                {
-                    printf("LIST COMMAND COULD NOT BE EXECUTED\n");
-                    success = -1;
-                }
-                else
-                {
-
-                    char FILE_BUFFER[FILE_CHUNK_SIZE];
-                    bzero(FILE_BUFFER, sizeof(FILE_BUFFER));
-                    int bytes_read = 0, bytes_sent, total_bytes_sent = 0;
-                    printf("BEGIN SENDING LIST CONTENTS\n");
-
-                    while ((bytes_read = fread(FILE_BUFFER, 1, FILE_CHUNK_SIZE, ls_file)) > 0)
-                    {
-                        bytes_sent = 0;
-                        while (bytes_sent < bytes_read)
-                        {
-                            bytes_sent += send(client_receiver_sd, FILE_BUFFER, bytes_read, 0);
-                        }
-                        total_bytes_sent += bytes_sent;
-                        printf("BYTES SENT TOTAL: %d | ITERATION BYTES SENT %d\n", total_bytes_sent, bytes_sent);
-                    }
-                    printf("END SENDING LIST CONTENTS\n");
-                    success = 0;
-                    close(client_receiver_sd);
-                }
-                pclose(ls_file);
+                printf("LIST COMMAND COULD NOT BE EXECUTED\n");
             }
+            else
+            {
+
+                char FILE_BUFFER[FILE_CHUNK_SIZE];
+                bzero(FILE_BUFFER, sizeof(FILE_BUFFER));
+
+                printf("BEGIN SENDING LIST CONTENTS\n");
+                int bytes_read = fread(FILE_BUFFER, 1, FILE_CHUNK_SIZE, ls_file);
+                int pid = fork();
+                if (pid == 0)
+                {
+
+                    send(client_receiver_sd, FILE_BUFFER, bytes_read, 0);
+                    pclose(ls_file);
+                    // close(client_receiver_sd);
+                    printf("Exiting fork\n");
+                    exit(0);
+                }
+
+                printf("END SENDING LIST CONTENTS\n");
+            }
+            printf("Done exiting fork fork\n");
             close(client_receiver_sd);
         }
         else if (strcmp(buffer, "RETR") == 0)
         {
+
             char params[buffer_size];
             bzero(params, sizeof(params));
             recv(client_receiver_sd, params, sizeof(params), 0);
+
+            char FILE_BUFFER[FILE_CHUNK_SIZE];
+            bzero(FILE_BUFFER, sizeof(FILE_BUFFER));
 
             printf("Params recieved: %s\n", params);
             int pid = fork();
             if (pid == 0)
             {
+                // open directory
+                DIR *directory_path;
+                struct dirent *file_pointer;
+                directory_path = opendir(current_directory);
+                chdir(current_directory);
 
                 FILE *fp = fopen(params, "r");
                 if (!fp)
                 {
                     perror("File does not exist.");
-                    send(client_receiver_sd, INVALID_SEQUENCE, sizeof(INVALID_SEQUENCE), 0);
+                    send(client_receiver_sd, INVALID_DIRECTORY, sizeof(INVALID_DIRECTORY), 0);
                     close(client_receiver_sd);
-                    return;
+                    exit(0);
                 }
 
                 int valread;
-                bzero(buffer, sizeof(buffer));
-                valread = fread(buffer, sizeof(char), FILE_CHUNK_SIZE, fp);
+
+                valread = fread(FILE_BUFFER, sizeof(char), FILE_CHUNK_SIZE, fp);
+
                 printf("Bytes read: %d\n", valread);
 
                 if (valread < FILE_CHUNK_SIZE)
                 {
 
-                    send(client_receiver_sd, buffer, valread, 0);
+                    send(client_receiver_sd, FILE_BUFFER, valread, 0);
                 }
                 else
                 {
+                    send(client_receiver_sd, FILE_BUFFER, valread, 0);
                     while (valread == FILE_CHUNK_SIZE)
                     {
+
                         if (valread > 0)
                         {
-                            valread = fread(buffer, sizeof(char), FILE_CHUNK_SIZE, fp);
-                            send(client_receiver_sd, buffer, valread, 0);
+                            valread = fread(FILE_BUFFER, sizeof(char), FILE_CHUNK_SIZE, fp);
+                            send(client_receiver_sd, FILE_BUFFER, valread, MSG_WAITALL);
+                            bzero(FILE_BUFFER, sizeof(FILE_BUFFER));
                         }
                         else
                         {
@@ -466,13 +460,23 @@ void serve_client(int client_sd, int user_index, struct sockaddr_in *client_addr
                         }
                     }
                 }
+
+                send(client_sd, TRANSFER_COMPLETED, sizeof(TRANSFER_COMPLETED), 0);
+
                 fclose(fp);
                 close(client_receiver_sd);
+                exit(0);
             }
             close(client_receiver_sd);
         }
         else if (strcmp(buffer, "STOR") == 0)
         {
+            DIR *directory_path;
+            struct dirent *file_pointer;
+            directory_path = opendir(current_directory);
+            chdir(current_directory);
+            char FILE_BUFFER[FILE_CHUNK_SIZE];
+            bzero(FILE_BUFFER, sizeof(FILE_BUFFER));
 
             char params[buffer_size];
             bzero(params, sizeof(params));
@@ -484,42 +488,49 @@ void serve_client(int client_sd, int user_index, struct sockaddr_in *client_addr
             strcpy(tmp_file, "tmp_");
             strcat(tmp_file, params);
 
-            FILE *fp = fopen(tmp_file, "w");
+            int valread = recv(client_receiver_sd, FILE_BUFFER, FILE_CHUNK_SIZE, 0);
+            printf("Valread %d\n", valread);
 
-            if (fp == NULL)
+            if (strcmp(FILE_BUFFER, INVALID_DIRECTORY) == 0)
             {
-                perror("Failed to write file");
-                return;
-            }
-
-            // Does the file exist?
-            if (strcmp(buffer, INVALID_SEQUENCE) == 0)
-            {
-                printf("%s\n", INVALID_SEQUENCE);
-                return;
-            }
-
-            int valread = recv(client_receiver_sd, buffer, FILE_CHUNK_SIZE, 0);
-
-            if (valread < FILE_CHUNK_SIZE)
-            {
-                fwrite(buffer, 1, valread, fp);
+                printf("%s\n", INVALID_DIRECTORY);
+                close(client_receiver_sd);
             }
             else
             {
+                FILE *fp = fopen(tmp_file, "w");
 
-                while (valread == FILE_CHUNK_SIZE)
-                { // Big files may require multiple reads
-                    fwrite(buffer, 1, valread, fp);
-                    bzero(buffer, sizeof(buffer));
-                    valread = recv(client_receiver_sd, buffer, FILE_CHUNK_SIZE, 0);
+                if (fp == NULL)
+                {
+                    perror("Failed to write file");
+                    return;
                 }
+                if (valread < FILE_CHUNK_SIZE)
+                {
+                    printf("Buffer %s\n", buffer);
+                    fwrite(FILE_BUFFER, 1, valread, fp);
+                }
+                else
+                {
+
+                    while (valread == FILE_CHUNK_SIZE)
+                    { // Big files may require multiple reads
+                        fwrite(FILE_BUFFER, 1, valread, fp);
+                        bzero(FILE_BUFFER, sizeof(FILE_BUFFER));
+                        valread = recv(client_receiver_sd, FILE_BUFFER, FILE_CHUNK_SIZE, 0);
+                    }
+                }
+                send(client_sd, TRANSFER_COMPLETED, sizeof(TRANSFER_COMPLETED), 0);
+                fclose(fp);
             }
 
-            fclose(fp);
             close(client_receiver_sd);
         }
-        close(client_receiver_sd);
+        else
+        {
+            send(client_sd, INVALID_COMMAND, sizeof(INVALID_COMMAND), 0);
+        }
+        // close(client_receiver_sd);
     }
     else
     {

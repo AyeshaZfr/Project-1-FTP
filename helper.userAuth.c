@@ -33,6 +33,8 @@ int read_file()
                 memcpy(new_username, &line[0], i);
                 strcpy(users[num_users].username, new_username);
 
+                printf("%s\n",new_username);
+
                 char new_password[read - i - 2];
                 memcpy(new_password, &line[i + 2], read);
                 strtok(new_password, "\n");
